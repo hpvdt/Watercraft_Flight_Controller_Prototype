@@ -1,0 +1,14 @@
+Distance: 190mm
+Distance: 200mm
+Distance: 195mm
+Distance: 198mm
+Distance: 210mm
+Distance: 230mm
+Distance: 220mm
+Distance: 215mm
+Distance: 216mm
+Distance: 217mm
+Distance: 219mm
+Distance: 221mm
+Distance: 223mm
+Distance: 225mm
