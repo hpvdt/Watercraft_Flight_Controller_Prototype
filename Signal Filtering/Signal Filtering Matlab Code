@@ -1,0 +1,48 @@
+%% Matlab
+
+clear all
+close all
+clc
+
+% Initiate your values 
+step = 0.1;
+x = -5:step:5;
+
+% Initiate basic curve
+% The objective is to achieve a curve as close to it as possible
+y = 2*x.^2 + 4*x -5
+
+
+hold on
+
+% Add noise to the curve. 
+y_noisy = y + 70*(rand(1,length(x))-0.5);
+plot(x,y_noisy)
+
+% Median filter, size 5
+n = 13
+offset = 6 % offset must be n/2 (integer division)
+
+% Loop through values of x minus first and last values
+for i = offset: length(x)-2*offset
+   
+    for j = 1: 2*offset+1
+    % Create segment of length 2*offset+1 of values y(x=i within segment)
+    segment(j) = y(i-offset + j)
+
+    end
+
+    Med = median(segment) % Find the median of the segment
+    theMean = mean(segment) % Find the mean of the segment
+    YMedFiltered(i) = Med  % Make an array of the median values
+    YMeanFiltered(i) = theMean % Make an array of the mean values
+
+end
+
+% Create an array of the same size, with corresponding x values
+
+xCorrected = -5+step*offset:step:5-step*offset
+
+% Plot median and mean over the corrected x
+plot(xCorrected,YMedFiltered)
+plot(xCorrected,YMeanFiltered)
