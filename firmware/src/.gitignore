@@ -1,0 +1,29 @@
+# build stuff
+build/
+*.o
+*.d
+*.bin
+*.elf
+*.map
+*.a
+*.hex
+*.log
+
+# cmake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# ninja
+.ninja_deps
+.ninja_log
+build.ninja
+
+# esp-idf temporary stuff
+sdkconfig
+sdkconfig.old
+config.env
+
+# vscode settings
+.vscode/
