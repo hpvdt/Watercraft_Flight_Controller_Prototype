@@ -1,7 +1,7 @@
-#include "Wire.h"
-#include "Stream.h"
-#include "Print.h"
-#include "WString.h"
+//#include "Wire.h"
+//#include "Stream.h"
+//#include "Print.h"
+//#include "WString.h"
 #include <array>
 
 const int SENSOR_COUNT = 4;
@@ -13,9 +13,9 @@ float sensorReadings[SENSOR_COUNT];
 bool sensorStatus[SENSOR_COUNT]; 
 int sensorsWorking = SENSOR_COUNT;
 
-const std::array<float, SENSOR_COUNT> X_POS = {0};
-const std::array<float, SENSOR_COUNT> Y_POS = {0};
-const std::array<float, SENSOR_COUNT> Z_POS = {0};
+const std::array<float, SENSOR_COUNT > X_POS = {0};
+const std::array<float, SENSOR_COUNT > Y_POS = {0};
+const std::array<float, SENSOR_COUNT > Z_POS = {0};
 
 bool readSensor(uint8_t address) {
     Wire.beginTransmission(address);
