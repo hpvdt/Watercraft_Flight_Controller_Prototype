@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "esp_timer.h": "c",
-        "freertos.h": "c"
+        "freertos.h": "c",
+        "task.h": "c"
     }
 }
