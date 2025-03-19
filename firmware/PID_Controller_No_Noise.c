@@ -66,7 +66,7 @@ int main() {
 
 
     PIDController pid;
-    initialize_PID(&pid, 3.25, 3, 0);  // Derivative term disabled due to strange exponential growth
+    initialize_PID(&pid, 1, 0, 0);  // Derivative term disabled due to strange exponential growth
 
     double pitch_target = 5.0, height_target = 10.0;
     double curr_pitch = 3.0, curr_height = 8.0;
@@ -79,7 +79,7 @@ int main() {
     printf("Previous Pitch Error: %.2f, Integral Pitch: %.2f\n", pid.prev_pitch_err, pid.integral_pitch);
     printf("Previous Height Error: %.2f, Integral Height: %.2f\n", pid.prev_height_err, pid.integral_height);
 
-    for (int t = 0; t < 60; t++) {
+    for (int t = 0; t < 20; t++) {
         // PID Control step with noise
         PID_Controller(&pid, pitch_target, height_target, curr_pitch, curr_height, &pitch_output, &height_output);
         curr_pitch = system_response(curr_pitch, pitch_output);
