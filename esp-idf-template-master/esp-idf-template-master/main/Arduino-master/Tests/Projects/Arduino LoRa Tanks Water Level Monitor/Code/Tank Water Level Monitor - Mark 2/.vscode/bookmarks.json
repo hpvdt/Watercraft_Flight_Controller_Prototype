@@ -1,0 +1,59 @@
+{
+	"files": [
+		{
+			"path": "../../../../../../C:/Users/Patapom/.platformio/packages/framework-arduino-avr/cores/arduino/Print.cpp",
+			"bookmarks": [
+				{
+					"line": 43,
+					"column": 18,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/Monitor/Monitor.cpp",
+			"bookmarks": [
+				{
+					"line": 133,
+					"column": 0,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/Helpers/LoRa.cpp",
+			"bookmarks": [
+				{
+					"line": 85,
+					"column": 13,
+					"label": ""
+				},
+				{
+					"line": 99,
+					"column": 6,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/Listener/Listener.cpp",
+			"bookmarks": [
+				{
+					"line": 68,
+					"column": 10,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "../../../../../../c:/Users/Patapom/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src/SoftwareSerial.cpp",
+			"bookmarks": [
+				{
+					"line": 171,
+					"column": 27,
+					"label": ""
+				}
+			]
+		}
+	]
+}
