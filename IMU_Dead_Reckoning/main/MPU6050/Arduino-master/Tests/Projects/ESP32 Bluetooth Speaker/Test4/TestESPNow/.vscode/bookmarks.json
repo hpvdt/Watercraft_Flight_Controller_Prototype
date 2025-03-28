@@ -1,0 +1,94 @@
+{
+	"files": [
+		{
+			"path": "src/Common/AudioBuffer.cpp",
+			"bookmarks": [
+				{
+					"line": 91,
+					"column": 10,
+					"label": ""
+				},
+				{
+					"line": 188,
+					"column": 16,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/Common/ESPNow/TransportESPNow.cpp",
+			"bookmarks": [
+				{
+					"line": 272,
+					"column": 8,
+					"label": ""
+				},
+				{
+					"line": 648,
+					"column": 14,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/Peripheral.cpp",
+			"bookmarks": [
+				{
+					"line": 76,
+					"column": 17,
+					"label": ""
+				},
+				{
+					"line": 292,
+					"column": 0,
+					"label": ""
+				},
+				{
+					"line": 362,
+					"column": 11,
+					"label": ""
+				},
+				{
+					"line": 379,
+					"column": 7,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "../../../../../../c:/Users/Patapom/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal-uart.c",
+			"bookmarks": [
+				{
+					"line": 421,
+					"column": 5,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/Central.cpp",
+			"bookmarks": [
+				{
+					"line": 77,
+					"column": 3,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/Common/I2S/I2SInput.cpp",
+			"bookmarks": [
+				{
+					"line": 97,
+					"column": 9,
+					"label": ""
+				},
+				{
+					"line": 241,
+					"column": 8,
+					"label": ""
+				}
+			]
+		}
+	]
+}
