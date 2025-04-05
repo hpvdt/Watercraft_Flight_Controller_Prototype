@@ -2,9 +2,6 @@
 #include <Arduino.h>
 #include <cmath>
 
-// const double width = ??;
-// const double length = ??;
-
 class Payload {
 
     public:
@@ -110,22 +107,7 @@ void getTotalNormal() {
     }
 }
 
-double calculate_height() {
-    '''Take the sensors from opposite corners (e.g., front left & back right)
-       and determine the height of the center point of the watercraft'''
 
-    return (Z_POS[0] + Z_POS[1]) / 2;
-}
-
-double calculate_pitch(double length) {
-    '''Take the sensors from parallel corners (e.g., front left & back left)
-       and determine the pitch of the watercraft'''
-
-    double height = fabs(Z_POS[0] - Z_POS[1]);
-    double pitch = tan(height / length); 
-
-    return pitch;
-}
 
 void setup() {
     Serial.begin(115200);
