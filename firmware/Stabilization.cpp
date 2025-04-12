@@ -82,46 +82,18 @@ float calculateRoll(const Output &result) {
     return acos(result.bisectorPosition[0] / (length / 2));
 }
 
-void getTotalNormal() {
-    if (data.sensorsWorking > 2) {
-        int points[3], index = 0;
-        for (int i = 0; i < data.SENSOR_COUNT && index < 3; i++) {
-            if (data.sensorStatus[i]) points[index++] = i;
-        }
-
-        float v1[3] = {
-            Payload::X_POS[points[1]] - Payload::X_POS[points[0]],
-            Payload::Y_POS[points[1]] - Payload::Y_POS[points[0]],
-            (Payload::Z_POS[points[1]] + data.sensorReadings[points[1]]) - (Payload::Z_POS[points[0]] + data.sensorReadings[points[0]])
-        };
-
-        float v2[3] = {
-            Payload::X_POS[points[2]] - Payload::X_POS[points[1]],
-            Payload::Y_POS[points[2]] - Payload::Y_POS[points[1]],
-            (Payload::Z_POS[points[2]] + data.sensorReadings[points[2]]) - (Payload::Z_POS[points[1]] + data.sensorReadings[points[1]])
-        };
-
-        float normal[3];
-        calculate3DNormal(v1, v2, normal);
-
-        Serial.printf("Normal Vector: [%f, %f, %f]\n", normal[0], normal[1], normal[2]);
-    } else {
-        Serial.println("ERROR! Insufficient working sensors.");
-    }
-}
-
 double calculate_height() {
     '''Take the sensors from opposite corners (e.g., front left & back right)
        and determine the height of the center point of the watercraft'''
 
-    return (Z_POS[0] + Z_POS[1]) / 2;
+    return (data.Z_POS[0] + data.Z_POS[1]) / 2;
 }
 
 double calculate_pitch(double length) {
     '''Take the sensors from parallel corners (e.g., front left & back left)
        and determine the pitch of the watercraft'''
 
-    double height = fabs(Z_POS[0] - Z_POS[1]);
+    double height = fabs(data.Z_POS[0] - data.Z_POS[1]);
     double pitch = tan(height / length); 
 
     return pitch;
