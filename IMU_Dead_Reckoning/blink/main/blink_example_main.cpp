@@ -17,7 +17,6 @@
 #include "MPU6050.h"
 #include "I2Cdev.h"
 
-
 #define PIN_SDA 21
 #define PIN_CLK 22
 
@@ -28,6 +27,10 @@ uint16_t packetSize = 42;    // expected DMP packet size (default is 42 bytes)
 uint16_t fifoCount;     // count of all bytes currently in FIFO
 uint8_t fifoBuffer[64]; // FIFO storage buffer
 uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+
+extern "C" void app_main() {
+
+}
 
 void task_initI2C(void *ignore) {
 	i2c_config_t conf;
