@@ -24,6 +24,7 @@ class Payload {
 
 struct Output {
     float bisectorPosition[2] = {0.0, 0.0};
+    float normalVector[3] = {0.0,0.0,0.0};
     float pitch = 0.0;
     float roll = 0.0;
 };
@@ -71,10 +72,19 @@ void calculatePerpendicularBisector(float endPoint[2]) {
     endPoint[1] = (b - a) / 2 + h / 2 * cos(theta);
 }
 
-void calculate3DNormal(const float v1[3], const float v2[3], float normal[3]) {
+void calculate3DNormal(const float p1[3], const float p2[3], const float p3[3]) {
+    '''Take the xyz position of each sensor and calculate the normal to the plane
+       that they form together.'''
+
+    float v1[3] = {p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]};
+    float v2[3] = {p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]};
+    normal[3] = {0,0,0};
+
     normal[0] = (v1[1] * v2[2]) - (v1[2] * v2[1]);
     normal[1] = (v1[2] * v2[0]) - (v1[0] * v2[2]);
     normal[2] = (v1[0] * v2[1]) - (v1[1] * v2[0]);
+
+    return normal;
 }
 
 float calculateRoll(const Output &result) {
