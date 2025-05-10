@@ -49,17 +49,3 @@ float measure_distance_cm(gpio_num_t trigger, gpio_num_t echo) {
     float distance_cm = (pulse_end - pulse_start) / 58.0;
     return distance_cm;
 }
-
-void sensor_task(void *arg) {
-    while (1) {
-        float distance1 = measure_distance_cm(TRIGGER_1, ECHO_1);
-        float distance2 = measure_distance_cm(TRIGGER_2, ECHO_2);
-        ESP_LOGI(TAG, "D1: %.2f cm, D2: %.2f", distance1, distance2);
-        vTaskDelay(pdMS_TO_TICKS(100)); // Measure every 1 second
-    }
-}
-
-void app_main(void) {
-    init_sensors();
-    xTaskCreate(sensor_task, "sensor_task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
-}
