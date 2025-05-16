@@ -1,4 +1,4 @@
-// I2Cdev library collection - Main I2C device class
+	// I2Cdev library collection - Main I2C device class
 // Abstracts bit and byte I2C R/W functions into a convenient class
 // EFM32 stub port by Nicolas Baldeck <nicolas@pioupiou.fr>
 // Based on Arduino's I2Cdev by Jeff Rowberg <jeff@rowberg.net>
@@ -74,8 +74,6 @@ uint16_t I2Cdev::readTimeout = I2CDEV_DEFAULT_READ_TIMEOUT;
  * @return Status of read operation (true = success)
  */
 int8_t I2Cdev::readBit(uint8_t devAddr, uint8_t regAddr, uint8_t bitNum, uint8_t *data, uint16_t timeout) {
-
-
 	uint8_t b;
     uint8_t count = readByte(devAddr, regAddr, &b, timeout);
     *data = b & (1 << bitNum);

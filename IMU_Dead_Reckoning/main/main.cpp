@@ -1,29 +1,12 @@
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
+
 #include <stdio.h>
 #include <math.h>
 
-Adafruit_MPU6050 mpu;
+uint8_t res1;
+uint8_t res2;
+uint8_t read_status;
 
 
-void setup() {
-    Serial.begin(115200);
-    while(!Serial) {
-        delay(10);
-    } 
-    if (!mpu.begin()) {
-        Serial.println("Failed to find MPU6050 chip");
-        while(1) {
-            delay(10);
-        }
-    }
-    Serial.println("MPU6050 Found!");
-    mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
-    mpu.setGyroRange(MPU6050_RANGE_250_DEG);
-    mpu.setFilterBandwidth(MPU6050_BAND_260_HZ);
-
-    
-}
 
 
 void dead_reckoning(double ***res, double t, double *x_0, double *y_0, double *z_0, double w_p, double w_r, double w_y, double a_x, double a_y, double a_z, double r_z, double v_z) {
@@ -80,13 +63,6 @@ void initialize(int check, double ****p_res) {
         *p_res = res;
     } 
 }
-int i = 0;
-void loop() {
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-    double t = 1/260;
-    double ***res;
-    initialize(i, &res);
-    i++;
-    dead_reckoning(res, t, *res[0], *res[1], *res[2], g.gyro.y, g.gyro.x, g.gyro.z, a.acceleration.x, a.acceleration.y, a.acceleration.z, *res[3][0], *res[3][1]);
+
+int main() {
 }

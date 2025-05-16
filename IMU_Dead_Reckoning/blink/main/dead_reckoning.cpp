@@ -53,9 +53,12 @@ void task_initI2C(void *ignore) {
 
 void task_display(void *) {
 	MPU6050 mpu = MPU6050();
-	mpu.initialize();
-	//mpu.initialize();
-	/*
+	if (mpu.testConnection()) {
+		printf("Yes\n");
+	}
+	else{
+		printf("fuck you\n");
+	}
 	mpu.initialize();
 	mpu.dmpInitialize();
 	mpu.CalibrateAccel(6); // from documentation, 6-7 loops (600-700 iterations) is fine
@@ -118,9 +121,9 @@ void task_display(void *) {
 	//Best result is to match with DMP refresh rate
 	// Its last value in components/MPU6050/MPU6050_6Axis_MotionApps20.h file line 310
 	// Now its 0x13, which means DMP is refreshed with 10Hz rate
-	// vTaskDelay(5/portTICK_PERIOD_MS);
+	vTaskDelay(5/portTICK_PERIOD_MS);
+	
 }
-*/
 	
 	vTaskDelete(NULL);
 }

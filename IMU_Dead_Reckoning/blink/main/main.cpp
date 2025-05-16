@@ -4,6 +4,7 @@ main running code for the MPU dead reckoning. most of the actual code is in dead
 #include "freertos/FreeRTOS.h"
 #include "sdkconfig.h"
 #include "freertos/task.h"
+#include "dead_reckoning.cpp"
 
 extern "C" {
     void app_main(void);
