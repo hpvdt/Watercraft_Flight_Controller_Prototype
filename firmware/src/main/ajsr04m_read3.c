@@ -11,8 +11,8 @@
 #define TRIGGER_2 GPIO_NUM_19 // Sensor 2 Trigger
 #define ECHO_2    GPIO_NUM_18 // Sensor 2 Echo
 
-#define TRIGGER_3 GPIO_NUM_32 // Sensor 2 Trigger
-#define ECHO_3    GPIO_NUM_34 // Sensor 2 Echo
+#define TRIGGER_3 GPIO_NUM_32 // Sensor 3 Trigger
+#define ECHO_3    GPIO_NUM_35 // Sensor 3 Echo
 
 static const char *TAG = "TRIPLE_AJ_SR04M";
 
