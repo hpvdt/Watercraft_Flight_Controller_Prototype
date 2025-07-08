@@ -2,8 +2,8 @@
  ================================================================
  File Name: sensor_data_processor.c
  Language: C
- Author: Tannaz Chowdhury
- Property of: HPVDT (Human Powered Vehicles Design Team)
+ Author: Tannaz
+ Property of: HPVDT 
  
  Description: 
  This program processes ultrasonic sensor data from text files,
