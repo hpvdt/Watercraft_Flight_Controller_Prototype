@@ -19,7 +19,7 @@ typedef struct {
 
 // Function to generate Gaussian noise using Box-Muller transform
 double gaussian_noise(double mean, double stddev) {  
-    double u1 = (double)rand() / PIDController;
+    double u1 = (double)rand() / RAND_MAX;
     double u2 = (double)rand() / RAND_MAX;
     double z = sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2); // Box-Muller transform
     return mean + z * stddev; // Returns a random value in the Gaussian Distribution generated
