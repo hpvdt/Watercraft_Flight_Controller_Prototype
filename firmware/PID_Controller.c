@@ -86,7 +86,7 @@ int main() {
 
     PIDController pid;
     initialize_PID(&pid, 0.8, 0.01, 0.01);  // Derivative term disabled due to strange exponential growth
-
+    // &pid will be replaced by 
     double pitch_target = 5.0, height_target = 10.0;
     double curr_pitch = 3.0, curr_height = 8.0;
     double pitch_output, height_output;
@@ -118,3 +118,4 @@ int main() {
 
     return 0;
 }
+// Next step: Integrate sensor readings as current position instead of having control loop update itself
