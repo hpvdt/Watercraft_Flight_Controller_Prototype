@@ -22,9 +22,9 @@ void initialize_PID(PIDController* pid, double Kp, double Ki, double Kd){
     pid->prev_time = clock();
 }
 
-double system_response(double current_angle, double pid_output) {
+double system_response(double current, double pid_output) {
     double K = 0.5; // System gain
-    return current_angle + K * pid_output;
+    return current + K * pid_output;
 }
 
 void PID_Controller(PIDController* pid, double pitch_target, double height_target, 
@@ -83,6 +83,7 @@ int main() {
         // PID Control step with noise
         PID_Controller(&pid, pitch_target, height_target, curr_pitch, curr_height, &pitch_output, &height_output);
         curr_pitch = system_response(curr_pitch, pitch_output);
+        curr_height = system_response(curr_height, height_output);
 
         // Print noisy results
         printf("Time: %d, Control: %f, Current Angle: %f\n", t, pitch_output, curr_pitch);
@@ -90,8 +91,8 @@ int main() {
 
     // Print final values
     printf("\nAfter PID Step:\n");
-    printf("New Pitch Output: %.2f\n", pitch_output);
-    printf("New Height Output: %.2f\n", height_output);
+    printf("New Pitch Output: %.2f\n", curr_pitch);
+    printf("New Height Output: %.2f\n", curr_height);
     printf("Updated Previous Pitch Error: %.2f, Integral Pitch: %.2f\n", pid.prev_pitch_err, pid.integral_pitch);
     printf("Updated Previous Height Error: %.2f, Integral Height: %.2f\n", pid.prev_height_err, pid.integral_height);
 
