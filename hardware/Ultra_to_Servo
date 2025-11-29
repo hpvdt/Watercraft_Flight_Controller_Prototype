@@ -1,0 +1,53 @@
+// ultrasonic sensor measures distance in mm, maps to servo. (20, 1000, 0, 160)
+
+#include <Servo.h>  // 1. Include the library
+
+const int trigPin = 11; 
+const int echoPin = 10; 
+const int servoPin = 9;  // 2. Define the pin for the servo
+
+Servo myServo; // 3. Create the servo object
+
+void setup() { 
+  Serial.begin(115200); 
+  pinMode(trigPin, OUTPUT); 
+  pinMode(echoPin, INPUT); 
+  
+  myServo.attach(servoPin); // 4. Tell Arduino where the servo is connected
+  Serial.println("start"); 
+}
+
+void loop() { 
+  // --- Sensor Reading Section ---
+  digitalWrite(trigPin, LOW); 
+  delayMicroseconds(2);      // Short stability delay
+
+  digitalWrite(trigPin, HIGH); 
+  delayMicroseconds(10); 
+  digitalWrite(trigPin, LOW); 
+
+  long duration = pulseIn(echoPin, HIGH); 
+  // REVERTED: Constant changed back to 0.3400/2 (mm)
+  long distance = duration * 0.3400 / 2; // Distance in millimeters (mm)
+
+  // --- Servo Logic Section ---
+  
+  // 5. Map the distance (200mm - 1000mm) to the Angle (0 - 160)
+  int angle = map(distance, 200, 1000, 0, 160);
+
+  // 6. Constrain the value
+  // This ensures the servo doesn't try to go below 0 or above 160.
+  angle = constrain(angle, 0, 160);
+
+  // 7. Move the servo
+  myServo.write(angle);
+
+  // --- Serial Monitor Output ---
+  Serial.print("Distance: "); 
+  Serial.print(distance);
+  // REVERTED: Display unit changed back to "mm"
+  Serial.print(" mm  |  Angle: ");
+  Serial.println(angle);
+  
+  delay(100); // Reduced to 100ms for smoother servo updates
+}
