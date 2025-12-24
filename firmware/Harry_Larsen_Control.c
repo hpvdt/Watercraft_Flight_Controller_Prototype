@@ -70,9 +70,10 @@ int main() {
     double AoA_output, H_output;
 
     for (int t = 0; t < 20; t++) {
-        // Larsen control
+        // get values from sensors; placeholders
         double H = get_H(t);
         double V = get_V(t);
+        // Larsen control
         Larsen_Controller(&larsen, H, &AoA_output, V);
         double AoA = AoA_output;
         // Print results
