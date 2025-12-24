@@ -42,6 +42,8 @@ void Larsen_Controller(LarsenController* larsen, double pitch_target, double hei
 
     // calculate output values
     *AoA_output = AoA + y;
+
+    // change this to H', then H_output = prev_H + H'*dt
     *H_output = V*(2*larsen->prev_H + larsen->prev_prev_H + dt*dt*(larsen->K*(AoA+y)-9.81))/(V+dt*dt*larsen->K);
 
     // Update Previous Values
