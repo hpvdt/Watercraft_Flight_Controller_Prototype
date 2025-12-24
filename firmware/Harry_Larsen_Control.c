@@ -1,11 +1,9 @@
-// Control equation: y = -(g1H + g2H’ + g3AoA + g4)
+// Control equation: u = -(g1H + g2H’ + g3AoA + g4)
 // control AOA: current_AOA + y = corrected_AOA 
-// H'' = K(AoA - H/V) - g => compute H = noise - ((H''+g/k)-AOA)V and feed back into equation
+// H'' = K(AoA - H'/V) - g => compute H = noise - ((H''+g/k)-AOA)V and feed back into equation
 // H'' determined by taking ((current_H -prev_H -)/dt - (prev_H - two_prev_H)/dt)/dt
 // V will be defined at every point in time => V(t)
 // functions: Gaussian noise, dirac impulse, ramp function, step function
-// after solving the equation, H = V*(2*H_prev + H_prev_prev + dt^2(K*AOA-g))/(V+dt^2*K)
-
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,20 +29,20 @@ void initialize_larsen(LarsenController* larsen, double g1, double g2, double g3
     larsen->prev_time = clock();
 }
 
-void Larsen_Controller(LarsenController* larsen, double pitch_target, double height_target, double AoA, double* AoA_output, double* H_output, double V) {
+void Larsen_Controller(LarsenController* larsen, double H, double* AoA_output, double V) {
     clock_t curr_time = clock();
-    double dt = ((double)(curr_time - larsen->prev_time)) / CLOCKS_PER_SEC; // Convert to seconds
-    if (dt < 1e-6) dt = 1e-6; // Prevent division by zero
+    // double dt = ((double)(curr_time - larsen->prev_time)) / CLOCKS_PER_SEC; // Convert to seconds
+    // if (dt < 1e-6) dt = 1e-6; // Prevent division by zero
+    double dt = 0.01; // just set a constant time frame for now
 
     // larsen calculations
-    double H = V*(2*larsen->prev_H + larsen->prev_prev_H + dt*dt*(larsen->K*AoA-9.81))/(V+dt*dt*larsen->K);
-    double y = -(larsen->g1*H + larsen->g2*(H-larsen->prev_H)/dt + larsen->g3*AoA + larsen->g4);
+    double Hdot = (H - larsen->prev_H) / dt;
+    double Hdotdot = (Hdot - (larsen->prev_H - larsen->prev_prev_H)/dt)/dt;
+    double AoA = (Hdotdot + 9.81)/larsen->K + Hdot/V;
+    double u = -(larsen->g1*H + larsen->g2*Hdot + larsen->g3*AoA + larsen->g4);
 
     // calculate output values
-    *AoA_output = AoA + y;
-
-    // change this to H', then H_output = prev_H + H'*dt
-    *H_output = V*(2*larsen->prev_H + larsen->prev_prev_H + dt*dt*(larsen->K*(AoA+y)-9.81))/(V+dt*dt*larsen->K);
+    *AoA_output = AoA + u;
 
     // Update Previous Values
     larsen->prev_prev_H = larsen->prev_H;
@@ -52,27 +50,33 @@ void Larsen_Controller(LarsenController* larsen, double pitch_target, double hei
     larsen->prev_time = curr_time;
 }
 
-int main() {
+// this function returns the current height
+double get_H(double t) {
+    double H = 0;
+    return H;
+}
 
-
-    LarsenController larsen;
-    initialize_larsen(&larsen, 1, 0, 0, 0, 0); 
-
-    double pitch_target = 5.0, height_target = 10.0;
-    double AoA = 3.0;
+// this function returns the current V 
+double get_V(double t) {
     double V = 1.0;
+    return V;
+}
+
+int main() {
+    
+    LarsenController larsen;
+    initialize_larsen(&larsen, 1, 1, 1, 0, 1); // tune g1 g2 g3 g4 K
+
     double AoA_output, H_output;
 
-    // Print initial values
-    printf("Before Larsen Step:\n");
-    printf("Pitch Target: %.2f, Current Pitch: %.2f\n", pitch_target, AoA);
-
     for (int t = 0; t < 20; t++) {
-        // PID Control step with noise
-        Larsen_Controller(&larsen, pitch_target, height_target, AoA, &AoA_output, &H_output, V);
-        AoA = AoA_output;
+        // Larsen control
+        double H = get_H(t);
+        double V = get_V(t);
+        Larsen_Controller(&larsen, H, &AoA_output, V);
+        double AoA = AoA_output;
         // Print results
-        printf("Time: %.2d, Current Angle: %.2f\n", t, AoA);
+        printf("Time: %.2d, Current Angle: %.2f, Current Height: %.2f\n", t, AoA, H);
     }
 
     return 0;
