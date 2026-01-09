@@ -1,0 +1,100 @@
+// Arduino code for Harry Larsen's controller
+
+#include <math.h>
+#include <Servo.h>
+
+// Pins
+#define TRIG_PIN 9
+#define ECHO_PIN 10
+#define SERVO_PIN 11
+
+// stores all larsen controller variables
+typedef struct {
+    float g1, g2, g3, g4;
+    float K, V;
+    float prev_H, prev_prev_H;
+    unsigned long prev_time;
+} LarsenController;
+
+LarsenController larsen;
+Servo foilServo;
+
+// Setup hardware and initialize struct
+void setup() {
+    Serial.begin(115200);
+    
+    // Initialize Pins
+    pinMode(TRIG_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
+    foilServo.attach(SERVO_PIN);
+
+    // Initialize Controller (Adjust gains here)
+    larsen.g1 = 1.0; 
+    larsen.g2 = 1.0; 
+    larsen.g3 = 1.0; 
+    larsen.g4 = 0.0; 
+    larsen.K = 1.0;
+    larsen.V = 1.0; // Current velocity placeholder
+    larsen.prev_H = 0;
+    larsen.prev_prev_H = 0;
+    larsen.prev_time = micros();
+}
+
+void loop() {
+    float currentH = getDistance(); // Get height from ultrasonic
+    float AoA_output;
+
+    // Run the controller logic
+    calculateLarsen(&larsen, currentH, &AoA_output);
+
+    // Actuate Servo
+    // We must map the "Angle of Attack" output (degrees) to the Servo pulse
+    // Assuming 90 is neutral, and your AoA range is roughly -20 to 20
+    float servoAngle = 90 + AoA_output; 
+    servoAngle = constrain(servoAngle, 45, 135); // Safety limits
+    foilServo.write(servoAngle);
+
+    // Debugging
+    Serial.print("Height: "); Serial.print(currentH);
+    Serial.print(" | Foil Angle: "); Serial.println(servoAngle);
+    
+    delay(20); // Small delay to stabilize the loop (~50Hz)
+}
+
+// The core logic from your C code
+void calculateLarsen(LarsenController* l, float H, float* AoA_output) {
+    unsigned long curr_time = micros();
+    float dt = (curr_time - l->prev_time) / 1000000.0; // Convert micros to seconds
+    if (dt < 0.001) dt = 0.01; // Prevent division by zero if loop is too fast
+
+    // Larsen calculations
+    float Hdot = (H - l->prev_H) / dt;
+    float Hdotdot = (Hdot - (l->prev_H - l->prev_prev_H) / dt) / dt;
+    
+    // Physics-based Angle of Attack
+    float AoA = (Hdotdot + 9.81) / l->K + Hdot / l->V;
+    
+    // Corrective action
+    float u = -(l->g1 * H + l->g2 * Hdot + l->g3 * AoA + l->g4);
+
+    // Final result
+    *AoA_output = AoA + u;
+
+    // Update state
+    l->prev_prev_H = l->prev_H;
+    l->prev_H = H;
+    l->prev_time = curr_time;
+}
+
+// Function to read HC-SR04 Ultrasonic Sensor
+float getDistance() {
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+
+    long duration = pulseIn(ECHO_PIN, HIGH);
+    float distance = (duration * 0.0343) / 2; // Distance in cm
+    return distance;
+}
