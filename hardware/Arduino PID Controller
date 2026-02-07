@@ -5,8 +5,8 @@ const int PIN_ECHO = 10;
 const int PIN_SERVO = 6;
 
 const int SERVO_DEFAULT = 90;
-const int SERVO_MIN = 45;
-const int SERVO_MAX = 135;
+const int SERVO_MIN = 0;
+const int SERVO_MAX = 180;
 
 const double TARGET_HEIGHT = 15.0;  // target height is to be changed -> units are in cm
 const unsigned long SAMPLE_TIME = 20; // in milliseconds (ms)
@@ -71,7 +71,7 @@ void setup(){
     
     servo.write(SERVO_DEFAULT);
 
-    initialize_PID(&pid, 1.5, 0.0, 0.0); // Tune the following constants
+    initialize_PID(&pid, 10, 10, 0.0); // Tune the following constants
 
     delay(1000);
 }
