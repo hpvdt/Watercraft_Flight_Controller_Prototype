@@ -8,7 +8,7 @@ const int SERVO_DEFAULT = 90;
 const int SERVO_MIN = 0;
 const int SERVO_MAX = 180;
 
-const double TARGET_HEIGHT = 15.0;  // target height is to be changed -> units are in cm
+const double TARGET_HEIGHT = 30;  // target height is to be changed -> units are in cm
 const unsigned long SAMPLE_TIME = 20; // in milliseconds (ms)
 
 struct PIDController{
