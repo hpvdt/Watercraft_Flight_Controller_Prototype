@@ -1,0 +1,665 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include <stdio.h>      // For sprintf()
+#include <string.h>     // For strlen()
+
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+#define PIN_TRIG_PORT   GPIOB
+#define PIN_TRIG_PIN    GPIO_PIN_6
+#define SERVO_CHANNEL   TIM_CHANNEL_3
+#define SERVO_US_MIN    1000
+#define SERVO_US_MAX    2000
+#define SERVO_US_MID    1500
+#define TARGET_HEIGHT   30.0
+#define SAMPLE_TIME     20
+#define SERVO_DEFAULT   90
+#define SERVO_MIN       0
+#define SERVO_MAX       180
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
+
+UART_HandleTypeDef huart2;
+
+/* USER CODE BEGIN PV */
+volatile uint32_t ic_rising  = 0;   // Timer tick when echo went HIGH
+volatile uint32_t ic_falling = 0;   // Timer tick when echo went LOW
+volatile uint8_t  ic_done    = 0;   // Flag: 1 when a full pulse has been captured
+
+typedef struct {
+    double Kp, Ki, Kd;
+    double integral;
+    double prev_error;
+} PIDController;
+
+PIDController pid;
+uint32_t last_pid_time = 0;
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_TIM1_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_USART2_UART_Init(void);
+/* USER CODE BEGIN PFP */
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * HELPER: Microsecond Delay
+ * TIM3 is configured as a free-running counter at 1 MHz (1 tick = 1 µs).
+ * We read the counter, add the desired delay, and spin until we reach it.
+ * Using __HAL_TIM_GET_COUNTER() reads the CNT register directly - very fast.
+ * ══════════════════════════════════════════════════════════════════════════════ */
+void delay_us(uint32_t us) {
+    // __HAL_TIM_SET_COUNTER sets TIM3's counter register to 0
+    __HAL_TIM_SET_COUNTER(&htim3, 0);
+    // Spin until the counter reaches our target
+    // This is a "busy-wait" loop - the CPU does nothing else while waiting
+    while (__HAL_TIM_GET_COUNTER(&htim3) < us);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * HELPER: Write Servo Angle (0–180°)
+ * Converts degrees → microseconds → timer compare register value.
+ *
+ * HAL_TIM_PWM is a hardware timer channel generating a fixed-frequency square
+ * wave. The "Compare" register (CCR) sets how many ticks the pulse stays HIGH.
+ * At 1 MHz timer clock: CCR value = pulse width in microseconds.
+ *
+ * __HAL_TIM_SET_COMPARE(&htim2, SERVO_CHANNEL, pulse_us)
+ *   → writes directly to TIM2->CCR3 (the compare register for channel 3)
+ * ══════════════════════════════════════════════════════════════════════════════ */
+void servo_write(int angle) {
+    // Clamp angle to valid range
+    if (angle < SERVO_MIN) angle = SERVO_MIN;
+    if (angle > SERVO_MAX) angle = SERVO_MAX;
+
+    // Map 0–180° to 1000–2000 µs (standard servo pulse range)
+    // This is the same math as Arduino's Servo.write() internally:
+    //   pulse = MIN + (angle / 180.0) * (MAX - MIN)
+    uint32_t pulse_us = SERVO_US_MIN + (uint32_t)((angle / 180.0) * (SERVO_US_MAX - SERVO_US_MIN));
+
+    // Write the compare value to the PWM channel
+    // This takes effect on the next PWM cycle (within 20ms)
+    __HAL_TIM_SET_COMPARE(&htim2, SERVO_CHANNEL, pulse_us);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * INTERRUPT CALLBACK: Input Capture
+ * This function is called AUTOMATICALLY by the HAL whenever TIM1 captures
+ * an edge on its input pin (PA8 / Echo).
+ *
+ * "Callback" = a function you write that the HAL calls for you.
+ * It OVERRIDES a weak (empty) function defined inside the HAL library.
+ * The keyword "weak" in C means "use this definition unless a stronger one exists."
+ *
+ * How Input Capture works:
+ *   - TIM1 runs continuously, counting up at a set frequency
+ *   - When the Echo pin changes state, TIM1 snapshots its counter into CCR1
+ *   - The HAL calls this callback and tells us which channel fired
+ *   - We alternate between detecting rising and falling edges by flipping
+ *     the polarity setting after each capture
+ * ══════════════════════════════════════════════════════════════════════════════ */
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
+
+    // Guard: only handle TIM1, Channel 1 (our Echo pin)
+    if (htim->Instance != TIM1 || htim->Channel != HAL_TIM_ACTIVE_CHANNEL_1)
+        return;
+
+    // Read the captured counter value
+    // HAL_TIM_ReadCapturedValue() reads TIM1->CCR1
+    uint32_t captured = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+
+    if (!ic_done) {  // Only process if we're waiting for a new pulse
+        if (ic_rising == 0) {
+            // First capture = rising edge
+            ic_rising = captured;
+
+            // Flip polarity to detect the FALLING edge next time
+            // TIM_INPUTCHANNELPOLARITY_FALLING tells the timer to capture
+            // on the next HIGH→LOW transition
+            __HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_1,
+                                          TIM_INPUTCHANNELPOLARITY_FALLING);
+        } else {
+            // Second capture = falling edge
+            ic_falling = captured;
+            ic_done = 1;  // Signal to main loop that a pulse is ready
+
+            // Reset polarity back to RISING for the next trigger cycle
+            __HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_1,
+                                          TIM_INPUTCHANNELPOLARITY_RISING);
+        }
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * SENSOR: Read Height via HC-SR04
+ * Same logic as Arduino, but using HAL GPIO and our delay_us() instead of
+ * digitalWrite() and delayMicroseconds().
+ *
+ * HAL_GPIO_WritePin(PORT, PIN, STATE)
+ *   → sets a specific GPIO pin HIGH (GPIO_PIN_SET) or LOW (GPIO_PIN_RESET)
+ *   → equivalent to Arduino's digitalWrite()
+ * ══════════════════════════════════════════════════════════════════════════════ */
+double read_height(void) {
+    // Reset input capture state
+    ic_rising = 0;
+    ic_falling = 0;
+    ic_done = 0;
+
+    // Send 10µs trigger pulse (same as Arduino version)
+    HAL_GPIO_WritePin(PIN_TRIG_PORT, PIN_TRIG_PIN, GPIO_PIN_RESET);
+    delay_us(2);
+    HAL_GPIO_WritePin(PIN_TRIG_PORT, PIN_TRIG_PIN, GPIO_PIN_SET);
+    delay_us(10);
+    HAL_GPIO_WritePin(PIN_TRIG_PORT, PIN_TRIG_PIN, GPIO_PIN_RESET);
+
+    // Wait for the interrupt callback to signal a complete pulse
+    // Timeout after 30ms (ball at 5m away = 29ms round trip - worst case)
+    uint32_t timeout = HAL_GetTick() + 30;  // HAL_GetTick() = millis()
+    while (!ic_done && HAL_GetTick() < timeout);
+
+    if (!ic_done) return -1.0;  // Timeout = no echo received
+
+    // Calculate pulse width in microseconds
+    // Handle timer overflow (counter wraps around at its ARR period)
+    // TIM1 ARR must be set to 0xFFFF or similar in CubeMX for this to work
+    uint32_t pulse_ticks;
+    if (ic_falling >= ic_rising) {
+        pulse_ticks = ic_falling - ic_rising;
+    } else {
+        // Timer overflowed between rising and falling edge
+        // Assuming TIM1 ARR = 0xFFFF (16-bit timer)
+        pulse_ticks = (0xFFFF - ic_rising) + ic_falling;
+    }
+
+    // Convert ticks → cm (same formula as Arduino)
+    // Assumes TIM1 is configured with 1MHz clock (1 tick = 1µs)
+    // Speed of sound = 0.0343 cm/µs, divide by 2 for round trip
+    return (pulse_ticks * 0.0343) / 2.0;
+}
+
+
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * PID: Identical logic to Arduino version
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+void initialize_PID(PIDController *p, double Kp, double Ki, double Kd) {
+    p->Kp = Kp; p->Ki = Ki; p->Kd = Kd;
+    p->integral = 0; p->prev_error = 0;
+}
+
+double compute_PID(PIDController *p, double target, double current, double dt) {
+    double error = target - current;
+    double P = p->Kp * error;
+    p->integral += error * dt;
+    if (p->integral >  50.0) p->integral =  50.0;
+    if (p->integral < -50.0) p->integral = -50.0;
+    double I = p->Ki * p->integral;
+    double D = p->Kd * (error - p->prev_error) / dt;
+    p->prev_error = error;
+    return P + I + D;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * SETUP — replaces Arduino's setup()
+ * In CubeMX-generated code, all peripheral Init() calls are placed BEFORE
+ * you reach USER CODE sections. Add your code in the USER CODE BEGIN blocks.
+ * ══════════════════════════════════════════════════════════════════════════════ */
+void app_init(void) {
+    // Start PWM on TIM2 Channel 3 (Servo)
+    // This begins toggling the PA3/PB10 pin at 50Hz
+    HAL_TIM_PWM_Start(&htim2, SERVO_CHANNEL);
+
+    // Start Input Capture with Interrupts on TIM1 Channel 1 (Echo)
+    // "WithIT" means "with Interrupt" - the callback fires on each edge
+    HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
+
+    // Start TIM3 as a free-running counter (for delay_us)
+    HAL_TIM_Base_Start(&htim3);
+
+    // Center the servo
+    servo_write(SERVO_DEFAULT);
+
+    // Initialize PID
+    initialize_PID(&pid, 10.0, 10.0, 0.0);
+
+    // Wait 1 second for servo to reach center and sensor to stabilize
+    HAL_Delay(1000);  // HAL_Delay() = Arduino's delay() in milliseconds
+
+    last_pid_time = HAL_GetTick();
+}
+
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * LOOP — replaces Arduino's loop()
+ * Call this repeatedly from inside main()'s while(1) loop.
+ * ══════════════════════════════════════════════════════════════════════════════ */
+void app_loop(void) {
+    uint32_t current_time = HAL_GetTick();
+
+    if (current_time - last_pid_time >= SAMPLE_TIME) {
+        double dt = (current_time - last_pid_time) / 1000.0;
+        last_pid_time = current_time;
+
+        double current_height = read_height();
+        if (current_height < 0 || current_height > 100) return;
+
+        double correction = compute_PID(&pid, TARGET_HEIGHT, current_height, dt);
+        double final_angle = SERVO_DEFAULT + correction;
+
+        // Clamp (replaces Arduino's constrain())
+        if (final_angle < SERVO_MIN) final_angle = SERVO_MIN;
+        if (final_angle > SERVO_MAX) final_angle = SERVO_MAX;
+
+        servo_write((int)final_angle);
+
+        // Serial print via USART2
+        // sprintf writes a formatted string into a char buffer (like printf)
+        // HAL_UART_Transmit sends raw bytes over UART
+        char buf[80];
+        int len = sprintf(buf,
+            "Target:%.1f Current:%.2f ServoAngle:%.1f\r\n",
+            TARGET_HEIGHT, current_height, final_angle);
+
+        // HAL_UART_Transmit(handle, data_pointer, length, timeout_ms)
+        HAL_UART_Transmit(&huart2, (uint8_t *)buf, len, HAL_MAX_DELAY);
+    }
+}
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_TIM1_Init();
+  MX_TIM2_Init();
+  MX_TIM3_Init();
+  MX_USART2_UART_Init();
+  /* USER CODE BEGIN 2 */
+  app_init();
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+	    app_loop();
+  }
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  /** Configure the main internal regulator output voltage
+  */
+  __HAL_RCC_PWR_CLK_ENABLE();
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 16;
+  RCC_OscInitStruct.PLL.PLLN = 336;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 179;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 65535;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_IC_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 83;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 19999;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+  HAL_TIM_MspPostInit(&htim2);
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 83;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 65535;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+
+  /* USER CODE END MX_GPIO_Init_1 */
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : B1_Pin */
+  GPIO_InitStruct.Pin = B1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : LD2_Pin */
+  GPIO_InitStruct.Pin = LD2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+
+  /* USER CODE END MX_GPIO_Init_2 */
+}
+
+/* USER CODE BEGIN 4 */
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+  while (1)
+  {
+  }
+  /* USER CODE END Error_Handler_Debug */
+}
+#ifdef USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */
