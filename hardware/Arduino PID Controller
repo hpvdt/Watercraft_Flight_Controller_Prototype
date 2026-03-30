@@ -29,6 +29,7 @@ void initialize_PID(PIDController* pid, double Kp, double Ki, double Kd){
     pid->prev_error = 0;
 }
 
+// Get the state of the system
 double read_height(){
     digitalWrite(PIN_TRIG, LOW);
     delayMicroseconds(2);
@@ -48,15 +49,31 @@ double read_height(){
 double compute_PID(PIDController* pid, double target, double current, double dt){
     double error = target - current;
 
+    // Calculate the adjustment from the proportion
     double P = pid->Kp * error;
 
-    pid->integral += error * dt;
-    if (pid->integral > 50) pid->integral = 50; // 50 is an arbituary number -> it is used to limit the "jerkiness" of the system
-    if (pid->integral < -50) pid->integral = -50;
+    // Calculate the adjustment from the integral
+    // Compute the unclamped output first so we can check for saturation before deciding whether to accumulate the integral.
+    double raw_output = P + pid->Ki * pid->integral + pid->Kd * (error - pid->prev_error) / dt;
+    double final_angle = SERVO_DEFAULT + raw_output;
+
+    // Check two conditions before accumulating the integral:
+    //   1. Saturation: the requested output is outside the servo's physical range, meaning the controller is asking for more than the actuator can deliver.
+    //   2. Same sign: the error and the raw output are pushing in the same direction.
+    bool is_saturated = (final_angle > SERVO_MAX) || (final_angle < SERVO_MIN);
+    bool same_sign = (error > 0) == (raw_output > 0);
+
+    if (!(is_saturated && same_sign)){
+        // Safe to integrate: either we're not saturated, or the error is already correcting back toward the setpoint
+        pid->integral += error * dt;
+    }
+
     double I = pid->Ki * pid->integral;
 
+    // Calculate the adjustment from the derivative
     double D = pid->Kd * (error - pid->prev_error) / dt;
 
+    // Update error term for next iteration
     pid->prev_error = error;
 
     return P + I + D;
@@ -71,7 +88,10 @@ void setup(){
     
     servo.write(SERVO_DEFAULT);
 
-    initialize_PID(&pid, 10, 10, 0.0); // Tune the following constants
+    initialize_PID(&pid, 10, 0.0, 0.0); // Tune the following constants
+    // 1. Start with Ki and Kd at 0. Tune Kp such that it oscillates around the target in its steady state. 
+    // 2. Half the Kp and slowly tune up Ki until the system reaches steady-state soon. Ki is too high if there is a consistent steady state error. 
+    // 3. Slowly increase Kd until the system never overshoots even under quick disturbances. Kd is too high if the system is oscillating a lot. 
 
     delay(1000);
 }
@@ -88,7 +108,10 @@ void loop(){
         if (current_height < 0 || current_height > 100){
           return;
         }
+
+        // Calculate the correction needed using the PID controller
         double correction_angle = compute_PID(&pid, TARGET_HEIGHT, current_height, dt);
+
         double final_angle = SERVO_DEFAULT + correction_angle;
         final_angle = constrain(final_angle, SERVO_MIN, SERVO_MAX);
 
