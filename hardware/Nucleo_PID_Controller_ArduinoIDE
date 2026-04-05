@@ -1,0 +1,163 @@
+/*
+ * ============================================================
+ * STM32 Nucleo F446RE — Arduino IDE Setup Notes
+ * ============================================================
+ *   URL: https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stm32_index.json
+ * - Board: Nucleo-64, Part Number: Nucleo F446RE
+ *
+ * UPLOAD METHOD
+ * -------------
+ * - STM32CubeProgrammer is required but had compatibility issues on macOS
+ * tried to use following commands to set PATH: 
+//Check who owned the .zshrc file
+//ls -la ~/.zshrc
+
+//Take ownership of it (it was owned by root)
+//sudo chown fw ~/.zshrc
+
+//Give yourself write permission
+//chmod u+w ~/.zshrc
+
+//Find where STM32_Programmer_CLI was actually installed
+//find /Applications -name "STM32_Programmer_CLI" 2>/dev/null
+
+//Remove the wrong path we added first
+//sed -i '' '/STM32CubeProgrammer/d' ~/.zshrc
+
+//Add the correct path
+//echo 'export PATH=$PATH:"/Applications/STMicroelectronics/STM32Cube/STM32CubeProgrammer/STM32CubeProgrammer.app/Contents/Resources/bin"' >> ~/.zshrc
+
+//Apply the changes
+//source ~/.zshrc
+
+//Verify it worked
+//STM32_Programmer_CLI --version
+
+//all this effort ended up not even mattering since switched upload method to Mass Storage which bypasses the cubeprogrammer
+ * code basically unchanged from 'Arduino PID Controller'
+*/
+
+#include <Servo.h>
+
+const int PIN_TRIG = D9;
+const int PIN_ECHO = D10;
+const int PIN_SERVO = D6;
+
+const int SERVO_DEFAULT = 90;
+const int SERVO_MIN = 0;
+const int SERVO_MAX = 180;
+
+const double TARGET_HEIGHT = 30;  // target height is to be changed -> units are in cm
+const unsigned long SAMPLE_TIME = 20; // in milliseconds (ms)
+
+struct PIDController{
+    double Kp, Ki, Kd;
+    double integral;
+    double prev_error;
+};
+
+Servo servo;
+PIDController pid;
+unsigned long last_pid_time = 0;
+
+void initialize_PID(PIDController* pid, double Kp, double Ki, double Kd){
+    pid->Kp = Kp;
+    pid->Ki = Ki;
+    pid->Kd = Kd;
+    pid->integral = 0;
+    pid->prev_error = 0;
+}
+
+// Get the state of the system
+double read_height(){
+    digitalWrite(PIN_TRIG, LOW);
+    delayMicroseconds(2);
+    digitalWrite(PIN_TRIG, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(PIN_TRIG, LOW);
+
+    long duration = pulseIn(PIN_ECHO, HIGH);
+
+    if(duration == 0){
+      return -1.0;
+    }
+    
+    return (duration * 0.0343) / 2.0;
+}
+
+double compute_PID(PIDController* pid, double target, double current, double dt){
+    double error = target - current;
+
+    // Calculate the adjustment from the proportion
+    double P = pid->Kp * error;
+
+    // Calculate the adjustment from the integral
+    // Compute the unclamped output first so we can check for saturation before deciding whether to accumulate the integral.
+    double raw_output = P + pid->Ki * pid->integral + pid->Kd * (error - pid->prev_error) / dt;
+    double final_angle = SERVO_DEFAULT + raw_output;
+
+    // Check two conditions before accumulating the integral:
+    //   1. Saturation: the requested output is outside the servo's physical range, meaning the controller is asking for more than the actuator can deliver.
+    //   2. Same sign: the error and the raw output are pushing in the same direction.
+    bool is_saturated = (final_angle > SERVO_MAX) || (final_angle < SERVO_MIN);
+    bool same_sign = (error > 0) == (raw_output > 0);
+
+    if (!(is_saturated && same_sign)){
+        // Safe to integrate: either we're not saturated, or the error is already correcting back toward the setpoint
+        pid->integral += error * dt;
+    }
+
+    double I = pid->Ki * pid->integral;
+
+    // Calculate the adjustment from the derivative
+    double D = pid->Kd * (error - pid->prev_error) / dt;
+
+    // Update error term for next iteration
+    pid->prev_error = error;
+
+    return P + I + D;
+}
+
+void setup(){
+    Serial2.begin(115200);
+
+    pinMode(PIN_TRIG, OUTPUT);
+    pinMode(PIN_ECHO, INPUT);
+    servo.attach(PIN_SERVO);
+    
+    servo.write(SERVO_DEFAULT);
+
+    initialize_PID(&pid, 10, 0.0, 0.0); // Tune the following constants
+    // 1. Start with Ki and Kd at 0. Tune Kp such that it oscillates around the target in its steady state. 
+    // 2. Half the Kp and slowly tune up Ki until the system reaches steady-state soon. Ki is too high if there is a consistent steady state error. 
+    // 3. Slowly increase Kd until the system never overshoots even under quick disturbances. Kd is too high if the system is oscillating a lot. 
+
+    delay(1000);
+}
+
+void loop(){
+    unsigned long current_time = millis();
+
+    if(current_time - last_pid_time >= SAMPLE_TIME){
+        double dt = (current_time - last_pid_time) / 1000.0;
+        last_pid_time = current_time;
+
+        double current_height = read_height();
+
+        if (current_height < 0 || current_height > 100){
+          return;
+        }
+
+        // Calculate the correction needed using the PID controller
+        double correction_angle = compute_PID(&pid, TARGET_HEIGHT, current_height, dt);
+
+        double final_angle = SERVO_DEFAULT + correction_angle;
+        final_angle = constrain(final_angle, SERVO_MIN, SERVO_MAX);
+
+        servo.write(final_angle); // servo library always converts it to integers
+
+        Serial2.print("Target:"); Serial2.print(TARGET_HEIGHT);
+        Serial2.print(" Current:"); Serial2.print(current_height);
+        Serial2.print(" ServoAngle:"); Serial2.println(final_angle);
+    }
+}
